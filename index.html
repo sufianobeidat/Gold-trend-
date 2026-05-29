@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>GOLD TREND – XAUUSD</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080808;color:#fff;font-family:'Segoe UI',Tahoma,sans-serif;min-height:100vh}
+input{font-family:inherit}
+input::placeholder{color:rgba(255,255,255,0.2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+const ANTHROPIC_API_KEY = "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";
+
+const SYSTEM_PROMPT = `أنت محلل ذهب محترف متخصص في XAUUSD. مهمتك تحليل صور الشارت وإعطاء إشارة تداول واضحة.
+
+قواعد التحليل الصارمة:
+- تحتاج 7 تأكيدات للإشارة الكاملة: اتجاه الترند، EMA 20/50، EMA 200، RSI، الزخم، الدايفرجنس، S&R
+- وقت الشارت = وقت الأردن مباشرة
+- الأخبار سياق فقط ولا تمنع الدخول
+
+إذا اكتملت جميع التأكيدات (7/7):
+أعطِ إشارة كاملة بهذا الشكل الحرفي:
+
+للشراء:
+🟢 BUY
+Entry: [السعر]
+SL: [السعر]
+TP1: [السعر]
+TP2: [السعر]
+TP3: [السعر]
+
+للبيع:
+🔴 SELL
+Entry: [السعر]
+SL: [السعر]
+TP1: [السعر]
+TP2: [السعر]
+TP3: [السعر]
+
+إذا لم تكتمل التأكيدات:
+⏳ WAIT
+اكتب سطراً واحداً فقط: انتظر [وصف موجز جداً للشرط المطلوب]
+
+قواعد صارمة للرد:
+- لا تذكر أي تفاصيل تقنية أو مؤشرات أو تأكيدات
+- لا تشرح السبب
+- فقط الإشارة والأرقام أو جملة الانتظار`;
+
+const T = {
+  ar: {
+    dir:"rtl",appSub:"XAUUSD • تحليل احترافي",bulls:"🐂 ثيران",bears:"🐻 دببة",
+    login:"دخول",register:"تسجيل",fullName:"الاسم الكامل",email:"الإيميل",password:"كلمة المرور",
+    namePlh:"اسمك",emailPlh:"example@email.com",passPh:"••••••••",
+    loginBtn:"دخول →",registerBtn:"إنشاء حساب →",loading:"جاري...",testAcc:"للتجربة",
+    wrongCreds:"بيانات خاطئة",emailUsed:"الإيميل مستخدم",fillAll:"أكمل جميع الحقول",
+    welcome:"مرحباً،",analyze:"تحليل",history:"السجل",plans:"الباقات",account:"حسابي",
+    remaining:"الإشارات المتبقية",perDay:"اليوم",per3Days:"كل 3 أيام",unlimited:"∞ غير محدود",
+    uploadTitle:"ارفع صور الشارت",uploadSub:"اضغط هنا أو اسحب الصور",photos:"صورة • اضغط لتغيير",
+    analyzeBtn:"تحليل الشارت →",analyzing:"جاري التحليل...",noQuota:"انتهت إشاراتك",
+    noQuotaFree:"انتهت إشاراتك المجانية (3 كل 3 أيام)",upgradeHint:"ترقَّ لباقة أعلى للمزيد",
+    errorMsg:"❌ حدث خطأ. حاول مرة أخرى.",histTitle:"سجل الإشارات",
+    filterAll:"الكل",filterBuy:"شراء",filterSell:"بيع",filterWait:"انتظار",noSignals:"لا توجد إشارات بعد",
+    plansTitle:"الباقات",plansSub:"اختر الباقة المناسبة لك",currentPlan:"باقتك الحالية",
+    free:"مجاني",perMonth:"/شهر",stripeNote:"* الدفع يُعالج بأمان عبر Stripe",
+    upgradeBtn:"ترقية لـ",downgradeBtn:"الرجوع للمجاني",accTitle:"حسابي",
+    buy:"شراء",sell:"بيع",wait:"انتظار",profile:"الملف الشخصي",planLabel:"الباقة",
+    saveBtn:"حفظ التغييرات",savedBtn:"✓ تم الحفظ",logoutBtn:"تسجيل الخروج",
+    planNames:{free:"مجاني",basic:"أساسي",premium:"بريميوم"},
+    planDescs:{free:"3 إشارات كل 3 أيام",basic:"20 إشارة يومياً",premium:"إشارات غير محدودة"},
+    planFeats:(p)=>[
+      p.signals===999?"✓ إشارات غير محدودة":p.id==="free"?`✓ ${p.signals} إشارات كل 3 أيام`:`✓ ${p.signals} إشارة يومياً`,
+      "✓ تحليل فوري بالذكاء الاصطناعي",
+      p.id!=="free"?"✓ دعم أولوية":"✗ دعم أولوية",
+      p.id==="premium"?"✓ إشعارات فورية":"✗ إشعارات فورية",
+    ],
+    chooseLanguage:"اختر لغتك",arabic:"العربية",english:"English",continue:"متابعة",
+    ago:"منذ",justNow:"الآن",minutes:"د",hours:"س",days:"يوم",
+  },
+  en: {
+    dir:"ltr",appSub:"XAUUSD • Professional Analysis",bulls:"🐂 Bulls",bears:"🐻 Bears",
+    login:"Login",register:"Register",fullName:"Full Name",email:"Email",password:"Password",
+    namePlh:"Your name",emailPlh:"example@email.com",passPh:"••••••••",
+    loginBtn:"Login →",registerBtn:"Create Account →",loading:"Loading...",testAcc:"Test account",
+    wrongCreds:"Invalid credentials",emailUsed:"Email already used",fillAll:"Fill all fields",
+    welcome:"Hello,",analyze:"Analyze",history:"History",plans:"Plans",account:"Account",
+    remaining:"Remaining signals",perDay:"today",per3Days:"per 3 days",unlimited:"∞ Unlimited",
+    uploadTitle:"Upload Chart Images",uploadSub:"Tap here or drag & drop",photos:"photos • tap to change",
+    analyzeBtn:"Analyze Chart →",analyzing:"Analyzing...",noQuota:"Quota exceeded",
+    noQuotaFree:"Free signals exhausted (3 per 3 days)",upgradeHint:"Upgrade for more signals",
+    errorMsg:"❌ Error. Please try again.",histTitle:"Signal History",
+    filterAll:"All",filterBuy:"Buy",filterSell:"Sell",filterWait:"Wait",noSignals:"No signals yet",
+    plansTitle:"Plans",plansSub:"Choose the right plan for you",currentPlan:"Current Plan",
+    free:"Free",perMonth:"/mo",stripeNote:"* Payments processed securely via Stripe",
+    upgradeBtn:"Upgrade to",downgradeBtn:"Switch to Free",accTitle:"My Account",
+    buy:"Buy",sell:"Sell",wait:"Wait",profile:"Profile",planLabel:"Plan",
+    saveBtn:"Save Changes",savedBtn:"✓ Saved",logoutBtn:"Logout",
+    planNames:{free:"Free",basic:"Basic",premium:"Premium"},
+    planDescs:{free:"3 signals per 3 days",basic:"20 signals/day",premium:"Unlimited signals"},
+    planFeats:(p)=>[
+      p.signals===999?"✓ Unlimited signals":p.id==="free"?`✓ ${p.signals} signals per 3 days`:`✓ ${p.signals} signals/day`,
+      "✓ Instant AI analysis",
+      p.id!=="free"?"✓ Priority support":"✗ Priority support",
+      p.id==="premium"?"✓ Instant notifications":"✗ Instant notifications",
+    ],
+    chooseLanguage:"Choose Your Language",arabic:"العربية",english:"English",continue:"Continue",
+    ago:"ago",justNow:"Just now",minutes:"m",hours:"h",days:"d",
+  },
+};
+
+const STORAGE_KEY="gt_signals", USERS_KEY="gt_users", SESSION_KEY="gt_session", LANG_KEY="gt_lang";
+
+function loadSignals(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")}catch{return[]}}
+function saveSignals(s){localStorage.setItem(STORAGE_KEY,JSON.stringify(s))}
+function loadUsers(){
+  try{
+    const u=JSON.parse(localStorage.getItem(USERS_KEY)||"[]");
+    if(!u.find(x=>x.email==="admin@goldtrend.com"))
+      u.push({id:"admin",name:"Admin",email:"admin@goldtrend.com",password:"admin123",plan:"premium",role:"admin",createdAt:Date.now()});
+    return u;
+  }catch{return[]}
+}
+function saveUsers(u){localStorage.setItem(USERS_KEY,JSON.stringify(u))}
+function loadSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||"null")}catch{return null}}
+function saveSession(s){localStorage.setItem(SESSION_KEY,s?JSON.stringify(s):"null")}
+function loadLang(){return localStorage.getItem(LANG_KEY)||null}
+function saveLang(l){localStorage.setItem(LANG_KEY,l)}
+
+function getUsageCount(userId,planId){
+  const signals=loadSignals().filter(s=>s.userId===userId);
+  if(planId==="free"){const t3=Date.now()-3*24*60*60*1000;return signals.filter(s=>s.ts>t3).length;}
+  const today=new Date().toDateString();
+  return signals.filter(s=>new Date(s.ts).toDateString()===today).length;
+}
+
+const PLANS=[
+  {id:"free",price:0,signals:3,color:"#888888"},
+  {id:"basic",price:9,signals:20,color:"#c8a000"},
+  {id:"premium",price:29,signals:999,color:"#f0c800"},
+];
+
+const toBase64=(file)=>new Promise((res,rej)=>{
+  const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);
+});
+
+function timeAgo(ts,t){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60)return t.justNow;
+  if(s<3600)return `${Math.floor(s/60)}${t.minutes} ${t.ago}`;
+  if(s<86400)return `${Math.floor(s/3600)}${t.hours} ${t.ago}`;
+  return `${Math.floor(s/86400)}${t.days} ${t.ago}`;
+}
+
+const C={
+  bg:"#080808",card:"rgba(255,255,255,0.03)",border:"rgba(255,255,255,0.07)",
+  gold:"#c8a000",goldBright:"#f0c800",green:"#00c864",red:"#dc3232",
+  text:"#fff",muted:"rgba(255,255,255,0.4)",faint:"rgba(255,255,255,0.1)",
+};
+
+const Card=({children,style={}})=>(
+  <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:"24px 20px",...style}}>{children}</div>
+);
+const Btn=({children,onClick,disabled,variant="gold",style={}})=>{
+  const v={
+    gold:{background:disabled?"rgba(255,255,255,0.06)":`linear-gradient(135deg,${C.gold},${C.goldBright})`,color:disabled?"rgba(255,255,255,0.3)":"#000"},
+    ghost:{background:"transparent",color:C.muted,border:`1px solid ${C.border}`},
+    danger:{background:"rgba(220,50,50,0.15)",color:C.red,border:`1px solid rgba(220,50,50,0.3)`},
+  };
+  return <button onClick={onClick} disabled={disabled} style={{padding:"13px 20px",borderRadius:12,border:"none",fontSize:14,fontWeight:700,cursor:disabled?"not-allowed":"pointer",transition:"all 0.2s",width:"100%",...v[variant],...style}}>{children}</button>;
+};
+const Input=({label,...props})=>(
+  <div style={{marginBottom:16}}>
+    {label&&<p style={{color:C.muted,fontSize:12,margin:"0 0 6px",fontWeight:600}}>{label}</p>}
+    <input {...props} style={{width:"100%",padding:"12px 14px",borderRadius:12,background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,color:C.text,fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+  </div>
+);
+
+function GoldTrendLogo({size=48}){
+  const cx=size/2,cy=size/2,r=size/2-1.5,u=size/48;
+  const bx=cx-7*u,dx=cx+7*u;
+  const bullTop=cy-r*0.45,bullBottom=cy+r*0.38;
+  const bearTop=cy-r*0.38,bearBottom=cy+r*0.45;
+  return(
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none">
+      <defs>
+        <linearGradient id={`gg${size}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#C8A000"/>
+          <stop offset="100%" stopColor="#F0C800"/>
+        </linearGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r={r} fill="#FFFFFF" stroke={`url(#gg${size})`} strokeWidth={2*u}/>
+      {[0.25,0.5,0.75].map((f,i)=>(
+        <line key={`h${i}`} x1={cx-Math.sqrt(r*r-Math.pow((f-0.5)*2*r,2))*0.95} y1={cy+(f-0.5)*2*r} x2={cx+Math.sqrt(r*r-Math.pow((f-0.5)*2*r,2))*0.95} y2={cy+(f-0.5)*2*r} stroke="#E8E0C0" strokeWidth={0.5*u}/>
+      ))}
+      {[0.25,0.5,0.75].map((f,i)=>(
+        <line key={`v${i}`} x1={cx+(f-0.5)*2*r} y1={cy-Math.sqrt(r*r-Math.pow((f-0.5)*2*r,2))*0.95} x2={cx+(f-0.5)*2*r} y2={cy+Math.sqrt(r*r-Math.pow((f-0.5)*2*r,2))*0.95} stroke="#E8E0C0" strokeWidth={0.5*u}/>
+      ))}
+      <line x1={bx} y1={bullBottom} x2={bx} y2={bullTop} stroke="#00C864" strokeWidth={2.5*u} strokeLinecap="round"/>
+      <line x1={bx} y1={bullTop} x2={bx-5*u} y2={bullTop+6*u} stroke="#00C864" strokeWidth={2.5*u} strokeLinecap="round"/>
+      <line x1={dx} y1={bearTop} x2={dx} y2={bearBottom} stroke="#DC3232" strokeWidth={2.5*u} strokeLinecap="round"/>
+      <line x1={dx} y1={bearBottom} x2={dx+5*u} y2={bearBottom-6*u} stroke="#DC3232" strokeWidth={2.5*u} strokeLinecap="round"/>
+      <circle cx={cx} cy={cy} r={3*u} fill="#C8A000"/>
+    </svg>
+  );
+}
+
+function BullBearScene(){
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"4px 0"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
+        <div style={{width:2,height:6,background:"#00c864",borderRadius:1}}/>
+        <div style={{width:8,height:22,background:"linear-gradient(180deg,#00e070,#008040)",borderRadius:2,boxShadow:"0 0 5px rgba(0,200,100,0.4)"}}/>
+        <div style={{width:2,height:5,background:"#00c864",borderRadius:1}}/>
+        <div style={{fontSize:7,color:"#00c864",fontWeight:700,marginTop:2}}>BUY</div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+        <div style={{fontSize:22,filter:"drop-shadow(0 0 4px rgba(0,200,100,0.5))",lineHeight:1}}>🐂</div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+        <div style={{width:1,height:12,background:"rgba(200,160,0,0.3)"}}/>
+        <div style={{width:18,height:18,borderRadius:"50%",background:"linear-gradient(135deg,#c8a000,#f0c800)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:900,color:"#000",boxShadow:"0 0 8px rgba(200,160,0,0.4)"}}>XAU</div>
+        <div style={{width:1,height:12,background:"rgba(200,160,0,0.3)"}}/>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+        <div style={{fontSize:22,filter:"drop-shadow(0 0 4px rgba(220,50,50,0.5))",lineHeight:1}}>🐻</div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
+        <div style={{width:2,height:5,background:"#dc3232",borderRadius:1}}/>
+        <div style={{width:8,height:22,background:"linear-gradient(180deg,#ff4444,#aa1111)",borderRadius:2,boxShadow:"0 0 5px rgba(220,50,50,0.4)"}}/>
+        <div style={{width:2,height:6,background:"#dc3232",borderRadius:1}}/>
+        <div style={{fontSize:7,color:"#dc3232",fontWeight:700,marginTop:2}}>SELL</div>
+      </div>
+    </div>
+  );
+}
+
+function GlowBg(){
+  return <div style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none",background:`radial-gradient(ellipse at 15% 15%,rgba(200,160,0,0.06) 0%,transparent 55%),radial-gradient(ellipse at 85% 85%,rgba(0,200,100,0.03) 0%,transparent 55%),radial-gradient(ellipse at 85% 15%,rgba(220,50,50,0.03) 0%,transparent 55%)`}}/>;
+}
+
+function Header({session,t}){
+  const plan=PLANS.find(p=>p.id===session.plan)||PLANS[0];
+  const planName=t.planNames[plan.id];
+  return(
+    <div style={{position:"relative",zIndex:1,maxWidth:480,margin:"0 auto",padding:"20px 16px 8px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{animation:"float 3s ease-in-out infinite"}}><GoldTrendLogo size={40}/></div>
+        <div>
+          <p style={{margin:0,fontSize:16,fontWeight:900,background:`linear-gradient(135deg,${C.gold},${C.goldBright})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:1}}>GOLD TREND</p>
+          <p style={{margin:0,fontSize:10,color:C.muted}}>{t.welcome} {session.name}</p>
+        </div>
+      </div>
+      <span style={{fontSize:10,padding:"4px 10px",borderRadius:20,background:`rgba(200,160,0,0.12)`,color:plan.color,fontWeight:700,border:`1px solid ${plan.color}40`}}>{planName}</span>
+    </div>
+  );
+}
+
+function LanguagePicker({onSelect}){
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <GlowBg/>
+      <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:360,textAlign:"center"}}>
+        <div style={{margin:"0 auto 12px",animation:"float 3s ease-in-out infinite",display:"inline-block"}}><GoldTrendLogo size={80}/></div>
+        <div style={{margin:"0 auto 12px",display:"flex",justifyContent:"center"}}><BullBearScene/></div>
+        <h1 style={{fontSize:28,fontWeight:900,margin:"0 0 8px",background:`linear-gradient(135deg,${C.gold},${C.goldBright})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>GOLD TREND</h1>
+        <p style={{color:C.muted,fontSize:12,margin:"0 0 32px",letterSpacing:3}}>XAUUSD</p>
+        <p style={{color:"rgba(255,255,255,0.6)",fontSize:16,fontWeight:600,margin:"0 0 24px"}}>Choose Language • اختر اللغة</p>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <button onClick={()=>onSelect("ar")} style={{padding:"18px",borderRadius:16,border:`2px solid ${C.gold}`,background:"rgba(200,160,0,0.08)",color:C.text,fontSize:18,fontWeight:800,cursor:"pointer",transition:"all 0.2s",display:"flex",alignItems:"center",justifyContent:"center",gap:12,direction:"rtl"}}>
+            <span style={{fontSize:24}}>🇯🇴</span>
+            <span style={{color:C.goldBright}}>العربية</span>
+            <span style={{color:C.muted,fontSize:13,fontWeight:400}}>Arabic</span>
+          </button>
+          <button onClick={()=>onSelect("en")} style={{padding:"18px",borderRadius:16,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:18,fontWeight:800,cursor:"pointer",transition:"all 0.2s",display:"flex",alignItems:"center",justifyContent:"center",gap:12,direction:"ltr"}}>
+            <span style={{fontSize:24}}>🇺🇸</span>
+            <span style={{color:C.goldBright}}>English</span>
+            <span style={{color:C.muted,fontSize:13,fontWeight:400}}>الإنجليزية</span>
+          </button>
+        </div>
+        <p style={{color:C.faint,fontSize:11,marginTop:24}}>You can change this later in settings</p>
+      </div>
+    </div>
+  );
+}
+
+function AuthScreen({t,mode,setMode,onLogin}){
+  const [name,setName]=useState("");const [email,setEmail]=useState("");
+  const [password,setPass]=useState("");const [error,setError]=useState("");const [loading,setLoading]=useState(false);
+  const submit=()=>{
+    setError("");setLoading(true);
+    setTimeout(()=>{
+      const users=loadUsers();
+      if(mode==="login"){
+        const u=users.find(x=>x.email===email&&x.password===password);
+        if(!u){setError(t.wrongCreds);setLoading(false);return;}
+        onLogin(u);
+      }else{
+        if(!name||!email||!password){setError(t.fillAll);setLoading(false);return;}
+        if(users.find(x=>x.email===email)){setError(t.emailUsed);setLoading(false);return;}
+        const nu={id:Date.now().toString(),name,email,password,plan:"free",role:"user",createdAt:Date.now()};
+        users.push(nu);saveUsers(users);onLogin(nu);
+      }
+      setLoading(false);
+    },600);
+  };
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,direction:t.dir}}>
+      <GlowBg/>
+      <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:400}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{margin:"0 auto 10px",display:"inline-block",animation:"float 3s ease-in-out infinite"}}><GoldTrendLogo size={76}/></div>
+          <div style={{margin:"0 auto 8px",display:"flex",justifyContent:"center"}}><BullBearScene/></div>
+          <h1 style={{fontSize:28,fontWeight:900,margin:"0 0 20px",background:`linear-gradient(135deg,${C.gold},${C.goldBright})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>GOLD TREND</h1>
+        </div>
+        <Card>
+          <div style={{display:"flex",marginBottom:24,background:"rgba(255,255,255,0.03)",borderRadius:12,padding:4}}>
+            {["login","register"].map(m=>(
+              <button key={m} onClick={()=>{setMode(m);setError("");}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",cursor:"pointer",background:mode===m?`linear-gradient(135deg,${C.gold},${C.goldBright})`:"transparent",color:mode===m?"#000":C.muted,fontWeight:700,fontSize:13,transition:"all 0.2s"}}>
+                {m==="login"?t.login:t.register}
+              </button>
+            ))}
+          </div>
+          {mode==="register"&&<Input label={t.fullName} value={name} onChange={e=>setName(e.target.value)} placeholder={t.namePlh}/>}
+          <Input label={t.email} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t.emailPlh}/>
+          <Input label={t.password} type="password" value={password} onChange={e=>setPass(e.target.value)} placeholder={t.passPh}/>
+          {error&&<p style={{color:C.red,fontSize:13,margin:"0 0 12px",textAlign:"center"}}>{error}</p>}
+          <Btn onClick={submit} disabled={loading}>{loading?`⟳ ${t.loading}`:mode==="login"?t.loginBtn:t.registerBtn}</Btn>
+        </Card>
+        <p style={{color:C.faint,fontSize:11,textAlign:"center",marginTop:16}}>{t.testAcc}: admin@goldtrend.com / admin123</p>
+      </div>
+    </div>
+  );
+}
+
+function AnalyzeTab({session,t}){
+  const [images,setImages]=useState([]);const [result,setResult]=useState(null);
+  const [loading,setLoading]=useState(false);const [dragOver,setDragOver]=useState(false);
+  const fileRef=useRef();
+  const plan=PLANS.find(p=>p.id===session.plan)||PLANS[0];
+  const used=getUsageCount(session.id,session.plan);
+  const remaining=plan.signals===999?999:plan.signals-used;
+  const canAnalyze=remaining>0;
+  const periodLabel=session.plan==="free"?t.per3Days:t.perDay;
+
+  const handleFiles=(files)=>{
+    const imgs=Array.from(files).filter(f=>f.type.startsWith("image/"));
+    if(!imgs.length)return;
+    setImages(imgs.map(f=>({file:f,url:URL.createObjectURL(f)})));
+    setResult(null);
+  };
+
+  const analyze=async()=>{
+    if(!images.length||!canAnalyze)return;
+    setLoading(true);setResult(null);
+    try{
+      const content=[];
+      for(const img of images){const b64=await toBase64(img.file);content.push({type:"image",source:{type:"base64",media_type:img.file.type||"image/jpeg",data:b64}});}
+      content.push({type:"text",text:"حلل هذه الشارتات وأعطني الإشارة."});
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:ANTHROPIC_MODEL,max_tokens:1000,system:SYSTEM_PROMPT,messages:[{role:"user",content}]})});
+      const data=await resp.json();
+      const text=data.content?.map(b=>b.text||"").join("")||t.errorMsg;
+      setResult(text.trim());
+      const signals=loadSignals();
+      signals.unshift({id:Date.now().toString(),userId:session.id,userName:session.name,text:text.trim(),ts:Date.now()});
+      saveSignals(signals.slice(0,200));
+    }catch{setResult(t.errorMsg);}
+    setLoading(false);
+  };
+
+  const parsed=parseResult(result);
+  const sc=parsed?sigColors(parsed.type):null;
+
+  return(
+    <div style={{position:"relative",zIndex:1,paddingTop:8,animation:"fadeUp 0.4s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <span style={{color:C.muted,fontSize:12}}>{t.remaining} {periodLabel}</span>
+        <span style={{color:remaining>3?C.green:C.goldBright,fontWeight:700,fontSize:13}}>{plan.signals===999?t.unlimited:`${Math.max(0,remaining)} / ${plan.signals}`}</span>
+      </div>
+      <div onClick={()=>canAnalyze&&fileRef.current.click()} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={e=>{e.preventDefault();setDragOver(false);handleFiles(e.dataTransfer.files);}} style={{border:`2px dashed ${dragOver?C.gold:"rgba(200,160,0,0.2)"}`,borderRadius:20,padding:"28px 20px",textAlign:"center",cursor:canAnalyze?"pointer":"not-allowed",background:dragOver?"rgba(200,160,0,0.05)":C.card,transition:"all 0.3s",marginBottom:14,opacity:canAnalyze?1:0.5}}>
+        <input ref={fileRef} type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>handleFiles(e.target.files)}/>
+        {images.length===0?(
+          <><div style={{margin:"0 auto 12px",display:"inline-block"}}><GoldTrendLogo size={44}/></div>
+          <p style={{color:"rgba(255,255,255,0.6)",margin:0,fontSize:15,fontWeight:600}}>{t.uploadTitle}</p>
+          <p style={{color:C.muted,margin:"6px 0 0",fontSize:12}}>{t.uploadSub}</p></>
+        ):(
+          <><div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center",marginBottom:10}}>
+            {images.map((img,i)=><img key={i} src={img.url} alt="" style={{width:64,height:64,objectFit:"cover",borderRadius:10,border:`1px solid rgba(200,160,0,0.3)`}}/>)}
+          </div><p style={{color:"rgba(200,160,0,0.8)",fontSize:12,margin:0}}>{images.length} {t.photos}</p></>
+        )}
+      </div>
+      {!canAnalyze&&(
+        <Card style={{marginBottom:14,textAlign:"center",border:`1px solid rgba(220,50,50,0.3)`,background:"rgba(220,50,50,0.06)"}}>
+          <p style={{color:C.red,margin:0,fontSize:13,fontWeight:600}}>{session.plan==="free"?t.noQuotaFree:t.noQuota}</p>
+          <p style={{color:C.muted,margin:"4px 0 0",fontSize:12}}>{t.upgradeHint}</p>
+        </Card>
+      )}
+      <Btn onClick={analyze} disabled={!images.length||loading||!canAnalyze}>
+        {loading?<span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>⟳</span>{t.analyzing}</span>:t.analyzeBtn}
+      </Btn>
+      {parsed&&(
+        <div style={{marginTop:20,borderRadius:24,border:`1px solid ${sc.border}`,background:sc.bg,boxShadow:sc.glow,padding:"28px 24px",animation:"fadeUp 0.4s ease"}}>
+          {formatSignal(parsed.text,sc)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryTab({session,t}){
+  const all=loadSignals().filter(s=>s.userId===session.id||session.role==="admin");
+  const [filter,setFilter]=useState("all");
+  const filtered=all.filter(s=>{
+    if(filter==="buy")return s.text.startsWith("🟢");
+    if(filter==="sell")return s.text.startsWith("🔴");
+    if(filter==="wait")return s.text.startsWith("⏳");
+    return true;
+  });
+  return(
+    <div style={{position:"relative",zIndex:1,paddingTop:8,animation:"fadeUp 0.4s ease"}}>
+      <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 16px",color:C.goldBright}}>{t.histTitle}</h2>
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+        {[["all",t.filterAll],["buy",t.filterBuy],["sell",t.filterSell],["wait",t.filterWait]].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilter(v)} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${filter===v?C.gold:C.border}`,background:filter===v?"rgba(200,160,0,0.15)":"transparent",color:filter===v?C.goldBright:C.muted,fontSize:12,fontWeight:600,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+      {filtered.length===0?(
+        <Card style={{textAlign:"center",padding:40}}>
+          <p style={{color:C.muted,fontSize:32,margin:"0 0 12px"}}>📭</p>
+          <p style={{color:C.muted,margin:0}}>{t.noSignals}</p>
+        </Card>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {filtered.map(s=>{
+            const p=parseResult(s.text);const sc=sigColors(p?.type||"wait");
+            const lines=s.text.split("\n").filter(Boolean);
+            return(
+              <div key={s.id} style={{borderRadius:16,border:`1px solid ${sc.border}40`,background:sc.bg,padding:"16px 18px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:16,fontWeight:800,color:sc.label}}>{lines[0]}</span>
+                  <span style={{fontSize:11,color:C.muted}}>{timeAgo(s.ts,t)}</span>
+                </div>
+                {lines.slice(1).map((l,i)=>{
+                  const [k,v]=l.includes(":")?l.split(":"):[null,l];
+                  return k?(<div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:`1px solid rgba(255,255,255,0.04)`}}><span style={{color:C.muted,fontSize:12}}>{k}</span><span style={{color:C.text,fontSize:13,fontWeight:700,fontFamily:"monospace"}}>{v?.trim()}</span></div>):<p key={i} style={{color:C.muted,fontSize:12,margin:"4px 0 0"}}>{l}</p>;
+                })}
+                {session.role==="admin"&&<p style={{color:C.faint,fontSize:10,margin:"8px 0 0"}}>👤 {s.userName}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlansTab({session,t,onUpgrade}){
+  return(
+    <div style={{position:"relative",zIndex:1,paddingTop:8,animation:"fadeUp 0.4s ease"}}>
+      <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 6px",color:C.goldBright}}>{t.plansTitle}</h2>
+      <p style={{color:C.muted,fontSize:13,margin:"0 0 24px"}}>{t.plansSub}</p>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {PLANS.map(plan=>{
+          const isCurrent=session.plan===plan.id;
+          const pName=t.planNames[plan.id];
+          const pDesc=t.planDescs[plan.id];
+          const feats=t.planFeats(plan);
+          return(
+            <div key={plan.id} style={{borderRadius:20,padding:"22px 20px",border:`2px solid ${isCurrent?plan.color:C.border}`,background:isCurrent?"rgba(200,160,0,0.06)":C.card,position:"relative",overflow:"hidden"}}>
+              {isCurrent&&<span style={{position:"absolute",top:14,left:14,fontSize:10,padding:"3px 10px",borderRadius:20,background:"rgba(200,160,0,0.2)",color:C.goldBright,fontWeight:700,border:`1px solid rgba(200,160,0,0.3)`}}>{t.currentPlan}</span>}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                <div>
+                  <h3 style={{margin:0,fontSize:20,fontWeight:900,color:plan.color}}>{pName}</h3>
+                  <p style={{margin:"4px 0 0",color:C.muted,fontSize:13}}>{pDesc}</p>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <span style={{fontSize:24,fontWeight:900,color:C.text}}>{plan.price===0?t.free:`$${plan.price}`}</span>
+                  {plan.price>0&&<p style={{color:C.muted,fontSize:11,margin:0}}>{t.perMonth}</p>}
+                </div>
+              </div>
+              <div style={{marginBottom:16}}>
+                {feats.map((f,i)=><p key={i} style={{margin:"4px 0",fontSize:13,color:f.startsWith("✓")?"rgba(255,255,255,0.75)":C.faint}}>{f}</p>)}
+              </div>
+              {!isCurrent&&<Btn onClick={()=>onUpgrade(plan.id)} variant={plan.id==="free"?"ghost":"gold"}>{plan.id==="free"?t.downgradeBtn:`${t.upgradeBtn} ${pName} →`}</Btn>}
+            </div>
+          );
+        })}
+      </div>
+      <p style={{color:C.faint,fontSize:11,textAlign:"center",marginTop:20}}>{t.stripeNote}</p>
+    </div>
+  );
+}
+
+function AccountTab({session,t,onLogout,onUpdate}){
+  const [name,setName]=useState(session.name);const [saved,setSaved]=useState(false);
+  const plan=PLANS.find(p=>p.id===session.plan)||PLANS[0];
+  const signals=loadSignals().filter(s=>s.userId===session.id);
+  const buys=signals.filter(s=>s.text.startsWith("🟢")).length;
+  const sells=signals.filter(s=>s.text.startsWith("🔴")).length;
+  const waits=signals.filter(s=>s.text.startsWith("⏳")).length;
+  const save=()=>{
+    const users=loadUsers();const idx=users.findIndex(u=>u.id===session.id);
+    if(idx>=0){users[idx].name=name;saveUsers(users);}
+    const updated={...session,name};saveSession(updated);onUpdate(updated);setSaved(true);
+    setTimeout(()=>setSaved(false),2000);
+  };
+  return(
+    <div style={{position:"relative",zIndex:1,paddingTop:8,animation:"fadeUp 0.4s ease"}}>
+      <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 20px",color:C.goldBright}}>{t.accTitle}</h2>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:20}}>
+        {[["🟢",buys,t.buy],["🔴",sells,t.sell],["⏳",waits,t.wait]].map(([icon,val,lbl])=>(
+          <Card key={lbl} style={{textAlign:"center",padding:"16px 8px"}}>
+            <p style={{fontSize:20,margin:"0 0 4px"}}>{icon}</p>
+            <p style={{fontSize:22,fontWeight:900,margin:0}}>{val}</p>
+            <p style={{fontSize:11,color:C.muted,margin:"2px 0 0"}}>{lbl}</p>
+          </Card>
+        ))}
+      </div>
+      <Card style={{marginBottom:14}}>
+        <h3 style={{fontSize:14,fontWeight:700,color:C.muted,margin:"0 0 16px",textTransform:"uppercase",letterSpacing:1}}>{t.profile}</h3>
+        <Input label={t.fullName} value={name} onChange={e=>setName(e.target.value)}/>
+        <div style={{marginBottom:16}}>
+          <p style={{color:C.muted,fontSize:12,margin:"0 0 6px",fontWeight:600}}>{t.email}</p>
+          <p style={{color:C.faint,fontSize:14,margin:0,padding:"12px 14px",background:"rgba(255,255,255,0.02)",borderRadius:12,border:`1px solid ${C.border}`}}>{session.email}</p>
+        </div>
+        <div style={{marginBottom:16}}>
+          <p style={{color:C.muted,fontSize:12,margin:"0 0 6px",fontWeight:600}}>{t.planLabel}</p>
+          <p style={{color:plan.color,fontSize:14,margin:0,fontWeight:700,padding:"12px 14px",background:"rgba(255,255,255,0.02)",borderRadius:12,border:`1px solid ${plan.color}30`}}>{t.planNames[plan.id]} — {t.planDescs[plan.id]}</p>
+        </div>
+        <Btn onClick={save}>{saved?t.savedBtn:t.saveBtn}</Btn>
+      </Card>
+      <Btn onClick={onLogout} variant="danger">{t.logoutBtn}</Btn>
+    </div>
+  );
+}
+
+function parseResult(text){
+  if(!text)return null;
+  if(text.startsWith("🟢"))return{type:"buy",text};
+  if(text.startsWith("🔴"))return{type:"sell",text};
+  return{type:"wait",text};
+}
+function sigColors(type){
+  return{
+    buy:{bg:"rgba(0,200,100,0.08)",border:"#00c864",glow:"0 0 40px rgba(0,200,100,0.25)",label:"#00c864"},
+    sell:{bg:"rgba(220,50,50,0.08)",border:"#dc3232",glow:"0 0 40px rgba(220,50,50,0.25)",label:"#dc3232"},
+    wait:{bg:"rgba(200,160,0,0.07)",border:"#c8a000",glow:"0 0 30px rgba(200,160,0,0.15)",label:"#c8a000"},
+  }[type]||{bg:"rgba(200,160,0,0.07)",border:"#c8a000",glow:"none",label:"#c8a000"};
+}
+function formatSignal(text,sc){
+  const lines=text.split("\n").filter(Boolean);
+  return lines.map((line,i)=>{
+    const isHeader=i===0;
+    const hasSep=line.includes(":")&&!line.startsWith("⏳");
+    const [lbl,val]=hasSep?line.split(":"):[null,line];
+    return(
+      <div key={i} style={{display:"flex",justifyContent:hasSep?"space-between":"center",alignItems:"center",padding:isHeader?"0 0 14px":"8px 0",borderBottom:hasSep&&i<lines.length-1?`1px solid rgba(255,255,255,0.06)`:"none"}}>
+        {isHeader?<span style={{fontSize:26,fontWeight:900,letterSpacing:2,color:sc.label}}>{line}</span>
+        :hasSep?<><span style={{color:"rgba(255,255,255,0.45)",fontSize:12,fontFamily:"monospace"}}>{lbl}</span><span style={{color:"#fff",fontSize:16,fontWeight:800,fontFamily:"monospace"}}>{val?.trim()}</span></>
+        :<span style={{color:"rgba(255,255,255,0.7)",fontSize:14,textAlign:"center",lineHeight:1.6}}>{line}</span>}
+      </div>
+    );
+  });
+}
+
+function App(){
+  const [lang,setLang]=useState(loadLang);
+  const [session,setSession]=useState(loadSession);
+  const [tab,setTab]=useState("analyze");
+  const [authMode,setAuthMode]=useState("login");
+  const t=T[lang||"ar"];
+
+  if(!lang)return <LanguagePicker onSelect={(l)=>{saveLang(l);setLang(l);}}/>;
+
+  const login=(u)=>{saveSession(u);setSession(u);setTab("analyze");};
+  const logout=()=>{saveSession(null);setSession(null);};
+
+  if(!session)return <AuthScreen t={t} mode={authMode} setMode={setAuthMode} onLogin={login}/>;
+
+  const NAV=[
+    {id:"analyze",icon:"⚡",label:t.analyze},
+    {id:"history",icon:"📋",label:t.history},
+    {id:"plans",icon:"💎",label:t.plans},
+    {id:"account",icon:"👤",label:t.account},
+  ];
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Segoe UI',Tahoma,sans-serif",direction:t.dir,paddingBottom:80}}>
+      <GlowBg/>
+      <Header session={session} t={t}/>
+      <div style={{maxWidth:480,margin:"0 auto",padding:"0 16px"}}>
+        {tab==="analyze"&&<AnalyzeTab session={session} t={t}/>}
+        {tab==="history"&&<HistoryTab session={session} t={t}/>}
+        {tab==="plans"&&<PlansTab session={session} t={t} onUpgrade={(plan)=>{
+          const users=loadUsers();const idx=users.findIndex(u=>u.id===session.id);
+          if(idx>=0){users[idx].plan=plan;saveUsers(users);}
+          const updated={...session,plan};saveSession(updated);setSession(updated);
+        }}/>}
+        {tab==="account"&&<AccountTab session={session} t={t} onLogout={logout} onUpdate={(u)=>{saveSession(u);setSession(u);}}/>}
+      </div>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:100,background:"rgba(8,8,8,0.95)",backdropFilter:"blur(20px)",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-around",padding:"10px 0 14px"}}>
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>setTab(n.id)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"4px 12px"}}>
+            <span style={{fontSize:20,filter:tab===n.id?"none":"grayscale(1) opacity(0.4)"}}>{n.icon}</span>
+            <span style={{fontSize:10,color:tab===n.id?C.goldBright:C.muted,fontWeight:tab===n.id?700:400}}>{n.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
