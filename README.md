@@ -1,0 +1,2 @@
+# Gold-trend-
+Gold chart
